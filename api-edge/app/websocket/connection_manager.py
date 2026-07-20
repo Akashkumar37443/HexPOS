@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Set, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
-import aioredis
+import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
 
