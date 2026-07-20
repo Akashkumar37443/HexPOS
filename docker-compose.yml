@@ -1,0 +1,118 @@
+version: "3.9"
+
+services:
+
+  # ─────────────────────────────────────────────
+  # React 19 Frontend (client-pos)
+  # ─────────────────────────────────────────────
+  client-pos:
+    build:
+      context: ./client-pos
+      dockerfile: Dockerfile
+    container_name: hexpos_client
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client-pos:/app
+      - /app/node_modules          # Prevent host node_modules from overwriting container's
+    environment:
+      - VITE_DOTNET_API_URL=http://localhost:5000
+      - VITE_FASTAPI_URL=http://localhost:8000
+    depends_on:
+      - api-transactional
+      - api-edge
+    networks:
+      - hexpos_net
+
+  # ─────────────────────────────────────────────
+  # .NET Core 9.0 Transactional API
+  # ─────────────────────────────────────────────
+  api-transactional:
+    build:
+      context: ./api-transactional
+      dockerfile: Dockerfile
+    container_name: hexpos_dotnet
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=HexPOS;User Id=sa;Password=HexPOS@Strong1;TrustServerCertificate=True;
+      - Redis__ConnectionString=redis:6379
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - hexpos_net
+
+  # ─────────────────────────────────────────────
+  # FastAPI Edge Service (api-edge)
+  # ─────────────────────────────────────────────
+  api-edge:
+    build:
+      context: ./api-edge
+      dockerfile: Dockerfile
+    container_name: hexpos_fastapi
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api-edge/app:/app/app    # Hot reload support
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=development
+    depends_on:
+      - redis
+    networks:
+      - hexpos_net
+
+  # ─────────────────────────────────────────────
+  # Redis — Shared Pub/Sub & Session Cache
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: hexpos_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - hexpos_net
+
+  # ─────────────────────────────────────────────
+  # MS SQL Server 2022 — Transactional DB
+  # ─────────────────────────────────────────────
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: hexpos_sqlserver
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=HexPOS@Strong1
+      - MSSQL_PID=Developer
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P HexPOS@Strong1 -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - hexpos_net
+
+# ─────────────────────────────────────────────
+# Named Volumes
+# ─────────────────────────────────────────────
+volumes:
+  redis_data:
+  sqlserver_data:
+
+# ─────────────────────────────────────────────
+# Internal Network
+# ─────────────────────────────────────────────
+networks:
+  hexpos_net:
+    driver: bridge

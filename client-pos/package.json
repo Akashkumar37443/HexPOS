@@ -1,0 +1,16 @@
+{
+    "name":  "client-pos",
+    "version":  "1.0.0",
+    "main":  "index.js",
+    "scripts":  {
+                    "dev":  "vite",
+                    "build":  "tsc \u0026\u0026 vite build"
+                },
+    "keywords":  [
+
+                 ],
+    "author":  "",
+    "license":  "ISC",
+    "description":  "",
+    "type":  "module"
+}
